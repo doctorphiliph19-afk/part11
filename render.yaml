@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: part11-pokedex-doctorphiliph19
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start-prod
+    healthCheckPath: /
