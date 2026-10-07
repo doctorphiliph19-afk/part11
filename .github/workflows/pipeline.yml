@@ -1,6 +1,10 @@
 name: Simple Deployment Pipeline
 
-on: push
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   simple_deployment_pipeline:
