@@ -6,4 +6,4 @@ services:
     autoDeployTrigger: commit
     buildCommand: npm install && npm run build
     startCommand: npm run start-prod
-    healthCheckPath: /
+    healthCheckPath: /health
