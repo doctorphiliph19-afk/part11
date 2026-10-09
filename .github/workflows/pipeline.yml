@@ -24,3 +24,6 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run Playwright tests
         run: npm run test:e2e
+      - name: Deploy
+        if: ${{ github.event_name == 'push' }}
+        run: npm run deploy
