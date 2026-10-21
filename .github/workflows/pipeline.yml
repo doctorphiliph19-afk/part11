@@ -26,6 +26,7 @@ jobs:
         run: npm run test:e2e
       - name: Deploy
         if: ${{ github.event_name == 'push' }}
+       
         run: npm run deploy
 
   tag_release:
@@ -38,6 +39,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
       - name: Bump version and push tag
         uses: anothrNick/github-tag-action@1.75.0
         env:
