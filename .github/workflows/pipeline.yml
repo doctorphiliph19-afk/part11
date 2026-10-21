@@ -1,37 +1,32 @@
-name: Deployment pipeline
+name: Simple Deployment Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
-    types: [opened, synchronize]
+    branches: [main]
 
 jobs:
   simple_deployment_pipeline:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run eslint
-      - run: npm test -- --runInBand
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Check style
+        run: npm run eslint
+      - run: npm test
       - run: npm run build
-      - name: Deploy to Render
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        env:
-          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
-        run: |
-          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
-            echo "::error::RENDER_DEPLOY_HOOK secret is not configured"
-            exit 1
-          fi
-          curl --fail --silent --show-error --request POST "$RENDER_DEPLOY_HOOK"
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+      - name: Run Playwright tests
+        run: npm run test:e2e
+      - name: Deploy
+        if: ${{ github.event_name == 'push' }}
+        run: npm run deploy
 
   tag_release:
     needs: [simple_deployment_pipeline]
@@ -40,7 +35,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Bump version and push tag
