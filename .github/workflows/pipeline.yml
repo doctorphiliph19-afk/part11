@@ -1,4 +1,3 @@
-
 name: Simple Deployment Pipeline
 
 on:
@@ -84,13 +83,11 @@ jobs:
           RELEASE_BRANCHES: main
 
   notify_success:
-    needs: [deploy, tag_release]
+    needs: deploy
     if: >-
-      always() &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
-      needs.deploy.result == 'success' &&
-      needs.tag_release.result == 'success'
+      needs.deploy.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Notify Discord of success
@@ -106,15 +103,14 @@ jobs:
             Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
   notify_failure:
-    needs: [build_and_test, deploy, tag_release]
+    needs: [build_and_test, deploy]
     if: >-
       always() &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
       (
         needs.build_and_test.result == 'failure' ||
-        needs.deploy.result == 'failure' ||
-        needs.tag_release.result == 'failure'
+        needs.deploy.result == 'failure'
       )
     runs-on: ubuntu-latest
     steps:
