@@ -50,7 +50,112 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v6
-        with:
+        with:        name: Deployment Pipeline
+        
+        on:
+          push:
+            branches: [main]
+          pull_request:
+            branches: [main]
+        
+        permissions:
+          contents: read
+        
+        jobs:
+          build_and_test:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: actions/checkout@v6
+        
+              - uses: actions/setup-node@v6
+                with:
+                  node-version: 20
+        
+              - name: Install dependencies
+                run: npm install
+        
+              - name: Check style
+                run: npm run eslint
+        
+              - name: Run tests
+                run: npm test
+        
+              - name: Build application
+                run: npm run build
+        
+              - name: Install Playwright Browsers
+                run: npx playwright install --with-deps chromium
+        
+              - name: Run Playwright tests
+                run: npm run test:e2e
+        
+          deploy:
+            needs: build_and_test
+            if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(toJSON(github.event), '#skip') }}
+            runs-on: ubuntu-latest
+            steps:
+              - uses: actions/checkout@v6
+        
+              - uses: actions/setup-node@v6
+                with:
+                  node-version: 20
+        
+              - name: Install dependencies
+                run: npm install
+        
+              - name: Deploy
+                run: npm run deploy
+        
+          notify_success:
+            needs: deploy
+            if: ${{ needs.deploy.result == 'success' }}
+            runs-on: ubuntu-latest
+            steps:
+              - name: Notify Discord
+                uses: sarisia/actions-status-discord@v1
+                with:
+                  webhook: ${{ secrets.DISCORD_WEBHOOK }}
+                  status: success
+                  title: Deployment successful
+                  description: |
+                    Commit: ${{ github.sha }}
+                    Message: ${{ github.event.head_commit.message || github.event.pull_request.title || 'No commit message available' }}
+        
+          notify_failure:
+            needs: [build_and_test, deploy]
+            if: ${{ always() && (needs.build_and_test.result == 'failure' || needs.deploy.result == 'failure') }}
+            runs-on: ubuntu-latest
+            steps:
+              - name: Notify Discord
+                uses: sarisia/actions-status-discord@v1
+                with:
+                  webhook: ${{ secrets.DISCORD_WEBHOOK }}
+                  status: failure
+                  title: Build or deployment failed
+                  description: |
+                    Commit: ${{ github.sha }}
+                    Message: ${{ github.event.head_commit.message || github.event.pull_request.title || 'No commit message available' }}
+                    Commit details: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+                    Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        
+          tag_release:
+            needs: deploy
+            if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(toJSON(github.event), '#skip') }}
+            runs-on: ubuntu-latest
+            permissions:
+              contents: write
+            steps:
+              - uses: actions/checkout@v6
+                with:
+                  fetch-depth: 0
+        
+              - name: Bump version and push tag
+                uses: anothrNick/github-tag-action@1.75.0
+                env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  DEFAULT_BUMP: patch
+                  DEFAULT_BRANCH: main
+                  RELEASE_BRANCHES: main
           fetch-depth: 0
 
       - name: Bump version and push tag
