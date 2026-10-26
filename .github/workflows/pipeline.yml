@@ -1,4 +1,3 @@
-
 name: Simple Deployment Pipeline
 
 on:
@@ -8,10 +7,137 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: read  name: Simple Deployment Pipeline
+  
+  on:
+    push:
+      branches: [main]
+    pull_request:
+      branches: [main]
+  
+  permissions:
+    contents: read
+  
+  jobs:
+    build_and_test:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v6
+  
+        - uses: actions/setup-node@v6
+          with:
+            node-version: 20
+            cache: npm
+  
+        - name: Install dependencies
+          run: npm ci
+  
+        - name: Check style
+          run: npm run eslint
+  
+        - name: Run tests
+          run: npm test
+  
+        - name: Build application
+          run: npm run build
+  
+        - name: Install Playwright browsers
+          run: npx playwright install --with-deps chromium
+  
+        - name: Run Playwright tests
+          run: npm run test:e2e
+  
+    deploy:
+      needs: build_and_test
+      if: >-
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/main' &&
+        !contains(toJSON(github.event), '#skip')
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v6
+  
+        - uses: actions/setup-node@v6
+          with:
+            node-version: 20
+            cache: npm
+  
+        - name: Install dependencies
+          run: npm ci
+  
+        - name: Deploy
+          run: npm run deploy
+  
+    notify_success:
+      needs: deploy
+      if: >-
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/main' &&
+        needs.deploy.result == 'success'
+      runs-on: ubuntu-latest
+      steps:
+        - name: Notify Discord of success
+          uses: sarisia/actions-status-discord@v1
+          with:
+            webhook: ${{ secrets.DISCORD_WEBHOOK }}
+            status: success
+            title: Deployment successful
+            description: |
+              Repository: ${{ github.repository }}
+              Commit: ${{ github.sha }}
+              Message: ${{ github.event.head_commit.message || 'No commit message available' }}
+              Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  
+    notify_failure:
+      needs: [build_and_test, deploy]
+      if: >-
+        always() &&
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/main' &&
+        (
+          needs.build_and_test.result == 'failure' ||
+          needs.deploy.result == 'failure'
+        )
+      runs-on: ubuntu-latest
+      steps:
+        - name: Notify Discord of failure
+          uses: sarisia/actions-status-discord@v1
+          with:
+            webhook: ${{ secrets.DISCORD_WEBHOOK }}
+            status: failure
+            title: Build or deployment failed
+            description: |
+              Repository: ${{ github.repository }}
+              Commit: ${{ github.sha }}
+              Message: ${{ github.event.head_commit.message || 'No commit message available' }}
+              Commit details: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+              Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  
+    tag_release:
+      needs: deploy
+      if: >-
+        needs.deploy.result == 'success' &&
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/main' &&
+        !contains(toJSON(github.event), '#skip')
+      runs-on: ubuntu-latest
+      permissions:
+        contents: write
+      steps:
+        - uses: actions/checkout@v6
+          with:
+            fetch-depth: 0
+  
+        - name: Bump version and push tag
+          uses: anothrNick/github-tag-action@1.75.0
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            DEFAULT_BUMP: patch
+            DEFAULT_BRANCH: main
+            RELEASE_BRANCHES: main
 
 jobs:
-  simple_deployment_pipeline:
+  build_and_test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -19,9 +145,10 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 20
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Check style
         run: npm run eslint
@@ -32,19 +159,85 @@ jobs:
       - name: Build application
         run: npm run build
 
-      - name: Install Playwright Browsers
+      - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
       - name: Run Playwright tests
         run: npm run test:e2e
 
+  deploy:
+    needs: build_and_test
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      !contains(toJSON(github.event), '#skip')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Deploy
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(join(github.event.commits.*.message, ' '), '#skip') }}
         run: npm run deploy
 
+  notify_success:
+    needs: deploy
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Discord of success
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: success
+          title: Deployment successful
+          description: |
+            Repository: ${{ github.repository }}
+            Commit: ${{ github.sha }}
+            Message: ${{ github.event.head_commit.message || 'No commit message available' }}
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+  notify_failure:
+    needs: [build_and_test, deploy]
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      (
+        needs.build_and_test.result == 'failure' ||
+        needs.deploy.result == 'failure'
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Discord of failure
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: failure
+          title: Build or deployment failed
+          description: |
+            Repository: ${{ github.repository }}
+            Commit: ${{ github.sha }}
+            Message: ${{ github.event.head_commit.message || 'No commit message available' }}
+            Commit details: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+            Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
   tag_release:
-    needs: [simple_deployment_pipeline]
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(join(github.event.commits.*.message, ' '), '#skip') }}
+    needs: deploy
+    if: >-
+      needs.deploy.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      !contains(toJSON(github.event), '#skip')
     runs-on: ubuntu-latest
     permissions:
       contents: write
